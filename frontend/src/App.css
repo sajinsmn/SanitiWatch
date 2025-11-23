@@ -1,0 +1,240 @@
+body {
+  font-family: Arial, sans-serif;
+  margin: 0;
+  background-color: #f4f4f4;
+}
+
+/* --- Styles for the Navbar --- */
+.navbar {
+  background-color: #333;
+  padding: 15px;
+  text-align: center;
+}
+
+.nav-button {
+  color: white;
+  text-decoration: none;
+  padding: 10px 20px;
+  margin: 0 10px;
+  border-radius: 5px;
+  background-color: #555;
+}
+
+.nav-button:hover {
+  background-color: #777;
+}
+
+/* --- Styles for the Admin/Worker/Mgmt pages --- */
+.page-container {
+  padding: 20px;
+  max-width: 500px;
+  margin: 20px auto;
+  background-color: rgb(0, 0, 0);
+  /* Black background */
+  border-radius: 8px;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+  color: white;
+  /* <-- THIS IS THE FIX */
+}
+
+.form-container {
+  display: flex;
+  flex-direction: column;
+}
+
+.form-container h2 {
+  text-align: center;
+}
+
+.form-group {
+  margin-bottom: 15px;
+}
+
+.form-group label {
+  display: block;
+  margin-bottom: 5px;
+  font-weight: bold;
+}
+
+.form-group input,
+.form-group select {
+  width: 100%;
+  padding: 8px;
+  box-sizing: border-box;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  /* Make form inputs dark-friendly */
+  background-color: #333;
+  color: white;
+}
+
+.submit-button {
+  background-color: #007bff;
+  color: white;
+  padding: 10px 15px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 16px;
+}
+
+.submit-button:hover {
+  background-color: #0056b3;
+}
+
+/* --- Styles for ManagePage (TriagePage.js) --- */
+
+.report-details-box {
+  background-color: #222;
+  /* Slightly lighter than the page bg */
+  border: 1px solid #444;
+  border-radius: 8px;
+  padding: 15px;
+  margin-bottom: 1rem;
+}
+
+.report-details-box h4 {
+  margin-top: 0;
+  color: #007bff;
+  /* Blue title */
+}
+
+.report-details-box p {
+  margin: 5px 0;
+  font-size: 0.9rem;
+}
+
+.report-details-box a {
+  color: #00aaff;
+  text-decoration: underline;
+}
+
+.manage-actions {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.manage-actions .submit-button {
+  flex: 1;
+  /* Make buttons share space */
+}
+
+/* Specific style for the reject button */
+.reject-button {
+  background-color: #dc3545;
+  /* Red color */
+}
+
+.reject-button:hover {
+  background-color: #c82333;
+  /* Darker red on hover */
+}
+
+/* --- Styles for Toast (from ReportIssuePage) --- */
+/* These are needed for the showToast function */
+
+.toast {
+  position: fixed;
+  bottom: 1.5rem;
+  right: 1.5rem;
+  padding: 1rem 1.5rem;
+  border-radius: 0.5rem;
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+  transition: all 300ms ease;
+  opacity: 0;
+  transform: translateY(1rem);
+  max-width: 350px;
+  color: white;
+  z-index: 50;
+}
+
+.toast-success {
+  background-color: #10B981;
+}
+
+.toast-destructive {
+  background-color: #EF4444;
+}
+
+.toast-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.toast-content {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+}
+
+.toast-content h4 {
+  font-weight: 600;
+  margin: 0;
+  line-height: 1.2;
+  color: white;
+}
+
+.toast-content p {
+  font-size: 0.875rem;
+  margin: 0.25rem 0 0 0;
+  line-height: 1.4;
+  color: white;
+}
+
+.toast-close-btn {
+  margin-left: auto;
+  padding-left: 0.5rem;
+  color: white;
+  opacity: 0.7;
+  background: none;
+  border: none;
+  cursor: pointer;
+  line-height: 1;
+}
+
+.toast-close-btn:hover {
+  opacity: 1;
+}
+
+.icon-md {
+  width: 1.25rem;
+  height: 1.25rem;
+  flex-shrink: 0;
+  margin-top: 0.1rem;
+}
+
+.icon-sm {
+  width: 1rem;
+  height: 1rem;
+}
+
+.mr-2 {
+  margin-right: 0.5rem;
+}
+
+.animate-spin {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+#toast-container {
+  position: fixed;
+  bottom: 0;
+  right: 0;
+  z-index: 1000;
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.icon-lg {
+  width: 1.5rem;
+  height: 1.5rem;
+}

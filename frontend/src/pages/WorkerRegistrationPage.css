@@ -1,0 +1,101 @@
+/* Worker Registration Page Styles */
+@import './HomePage.css';
+
+.registration-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 80vh;
+  padding: 2rem;
+}
+
+.registration-card {
+  background: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 1.5rem;
+  padding: 2rem;
+  max-width: 500px;
+  width: 100%;
+  box-shadow: 0 20px 25px rgba(0, 0, 0, 0.2);
+}
+
+.registration-header {
+  text-align: center;
+  margin-bottom: 2rem;
+  color: white;
+}
+
+.registration-header h1 {
+  font-size: 2rem;
+  font-weight: 800;
+  margin-bottom: 0.5rem;
+}
+
+.registration-header p {
+  font-size: 1rem;
+  color: #9ca3af;
+}
+
+.worker-registration-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.form-group label {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #d1d5db;
+}
+
+.form-input {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 0.5rem;
+  background: rgba(0, 0, 0, 0.3);
+  color: white;
+  font-size: 1rem;
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;
+  box-sizing: border-box;
+}
+
+.form-input:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+}
+
+.form-input::placeholder {
+  color: #6b7280;
+}
+
+textarea.form-input {
+  min-height: 80px;
+  resize: vertical;
+  font-family: inherit;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .registration-card {
+    padding: 1.5rem;
+  }
+  
+  .registration-header h1 {
+    font-size: 1.5rem;
+  }
+}
+
+
+
+
+
+

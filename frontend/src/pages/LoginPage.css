@@ -1,0 +1,95 @@
+/* 1. Page Wrapper
+   This now has the dark gradient style.
+*/
+.login-page-wrapper {
+  font-family: 'Inter', sans-serif;
+  
+  /* --- THIS IS THE FIX --- */
+  /* This combines the solid blue base with the dark overlay from the homepage */
+  background-color: #1066c1; /* Solid blue base color */
+  background-image: linear-gradient(rgba(0,0,0,0.1), rgba(0,0,0,0.4)); /* Dark overlay */
+  /* --- End of fix --- */
+
+  min-height: 100vh;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 2rem;
+  color: white;
+  box-sizing: border-box; 
+}
+
+/* 2. Form Container (borrows from .hero-card in HomePage.css)
+   This creates the semi-transparent card effect.
+*/
+.login-form-container {
+  max-width: 450px;
+  width: 100%;
+  padding: 2.5rem;
+  backdrop-filter: blur(4px);
+  background-color: rgba(0, 0, 0, 0.3);
+  border-radius: 1.5rem; /* rounded-3xl */
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  border: 1px solid #4b5563; /* border-gray-700 */
+}
+
+/* 3. Form Elements (styled to match the homepage) */
+.login-form-container h2 {
+  font-size: 2.25rem; /* 4xl */
+  font-weight: 800; /* extrabold */
+  text-align: center;
+  margin-bottom: 2rem;
+  text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+.form-group {
+  margin-bottom: 1.5rem;
+  display: flex;
+  flex-direction: column;
+}
+
+.form-group label {
+  font-size: 0.875rem; /* text-sm */
+  font-weight: 600; /* semibold */
+  margin-bottom: 0.5rem;
+  color: #d1d5db; /* gray-300 */
+}
+
+.form-group input {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  border-radius: 0.5rem; /* rounded-lg */
+  border: 1px solid #4b5563; /* border-gray-700 */
+  background-color: rgba(0, 0, 0, 0.2);
+  color: white;
+  font-size: 1rem;
+  transition: border-color 0.3s, box-shadow 0.3s;
+  box-sizing: border-box; /* Ensures padding doesn't break width */
+}
+
+.form-group input:focus {
+  outline: none;
+  border-color: #3b82f6; /* blue-500 */
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.5);
+}
+
+/* 4. Button (borrows from .hero-button in HomePage.css) */
+.submit-button {
+  width: 100%; /* Make button full-width */
+  padding: 0.75rem 2rem;
+  background-color: #2563eb; /* bg-blue-600 */
+  color: white;
+  border: none;
+  border-radius: 9999px; /* rounded-full */
+  font-size: 1rem;
+  font-weight: 600;
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+  transition: all 0.3s ease;
+  transform: scale(1);
+  cursor: pointer;
+}
+
+.submit-button:hover {
+  background-color: #3b82f6; /* hover:bg-blue-500 */
+  transform: scale(1.02);
+}

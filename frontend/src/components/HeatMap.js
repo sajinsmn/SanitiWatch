@@ -1,0 +1,738 @@
+import React, { useState, useEffect, useRef } from 'react';
+
+// Load Google Maps API
+export const loadGoogleMapsAPI = () => {
+  return new Promise((resolve, reject) => {
+    // Check if Google Maps API is already loaded
+    if (window.google && window.google.maps) {
+      resolve();
+      return;
+    }
+    
+    // Check if script is already being loaded
+    if (document.querySelector('script[src*="maps.googleapis.com/maps/api/js"]')) {
+      // Wait for the existing script to load
+      const checkInterval = setInterval(() => {
+        if (window.google && window.google.maps) {
+          clearInterval(checkInterval);
+          resolve();
+        }
+      }, 100);
+      
+      // Timeout after 10 seconds
+      setTimeout(() => {
+        clearInterval(checkInterval);
+        reject(new Error('Google Maps API loading timeout'));
+      }, 10000);
+      
+      return;
+    }
+    
+    const script = document.createElement('script');
+    const apiKey = process.env.REACT_APP_GOOGLE_MAPS_API_KEY;
+    
+    if (!apiKey) {
+      console.error('Google Maps API key is missing');
+      reject(new Error('Google Maps API key is missing'));
+      return;
+    }
+    
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=visualization&callback=initMap`;
+    script.async = true;
+    script.defer = true;
+    
+    // Set up callback
+    window.initMap = () => {
+      delete window.initMap;
+      resolve();
+    };
+    
+    script.onerror = () => {
+      delete window.initMap;
+      reject(new Error('Failed to load Google Maps API'));
+    };
+    
+    document.head.appendChild(script);
+  });
+};
+
+function HeatMap({ reports = [], onReportClick, userRole = 'user', userId = null, assignedReportIds = [] }) {
+  const [mapsLoaded, setMapsLoaded] = useState(false);
+  const [groupedReports, setGroupedReports] = useState({});
+  const [selectedReport, setSelectedReport] = useState(null);
+  const [showReportModal, setShowReportModal] = useState(false);
+  const [workerLocation, setWorkerLocation] = useState(null);
+  const mapRef = useRef(null);
+  const mapInstanceRef = useRef(null);
+  const heatmapLayerRef = useRef(null);
+  const markersRef = useRef([]);
+  const workerMarkerRef = useRef(null);
+
+  useEffect(() => {
+    loadGoogleMapsAPI()
+      .then(() => {
+        console.log('Google Maps API loaded successfully');
+        setMapsLoaded(true);
+      })
+      .catch((error) => {
+        console.error('Failed to load Google Maps API:', error);
+        setMapsLoaded(false);
+      });
+    
+    // Get current location for both workers and users
+    if ((userRole === 'worker' || userRole === 'user') && navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          setWorkerLocation({
+            lat: position.coords.latitude,
+            lng: position.coords.longitude,
+          });
+        },
+        (error) => {
+          console.error('Error getting location:', error);
+        },
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+      );
+    }
+  }, [userRole]);
+
+  useEffect(() => {
+    // Filter out completed reports older than 1 day
+    const oneDayAgo = new Date();
+    oneDayAgo.setDate(oneDayAgo.getDate() - 1);
+    
+    const filteredReports = reports.filter(report => {
+      if (report.status === 'Completed') {
+        // Only show completed reports from the last 24 hours
+        const completedDate = report.completedAt ? new Date(report.completedAt) : new Date(report.updatedAt);
+        return completedDate >= oneDayAgo;
+      }
+      return true; // Show all non-completed reports
+    });
+    
+    // Group reports by location (latitude, longitude)
+    const grouped = {};
+    filteredReports.forEach(report => {
+      if (report.location?.latitude && report.location?.longitude) {
+        const key = `${parseFloat(report.location.latitude).toFixed(4)},${parseFloat(report.location.longitude).toFixed(4)}`;
+        if (!grouped[key]) {
+          grouped[key] = {
+            location: {
+              lat: parseFloat(report.location.latitude),
+              lng: parseFloat(report.location.longitude),
+              address: report.location.address || 'Unknown Location'
+            },
+            reports: []
+          };
+        }
+        grouped[key].reports.push(report);
+      }
+    });
+    setGroupedReports(grouped);
+  }, [reports]);
+
+  useEffect(() => {
+    if (mapsLoaded && window.google && window.google.maps && mapRef.current) {
+      initializeMap();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mapsLoaded, reports, workerLocation]);
+
+  const initializeMap = () => {
+    try {
+      if (!mapRef.current) {
+        console.error('Map reference is not available');
+        return;
+      }
+
+      // Check if Google Maps API is available
+      if (!window.google || !window.google.maps) {
+        console.error('Google Maps API is not loaded');
+        return;
+      }
+
+      // Clear existing map
+      if (mapInstanceRef.current) {
+        mapInstanceRef.current = null;
+      }
+
+      // Clear existing markers
+      markersRef.current.forEach(marker => marker.setMap(null));
+      markersRef.current = [];
+
+      // Clear existing heatmap
+      if (heatmapLayerRef.current) {
+        heatmapLayerRef.current.setMap(null);
+      }
+
+      // Determine center: worker location if available, else first report, else default
+      let center = { lat: 11.0168, lng: 76.9558 }; // Default Coimbatore
+      
+      if (workerLocation && workerLocation.lat && workerLocation.lng) {
+        center = { lat: workerLocation.lat, lng: workerLocation.lng };
+      } else if (reports.length > 0) {
+        const firstValidReport = reports.find(report => 
+          report.location && 
+          report.location.latitude && 
+          report.location.longitude
+        );
+        if (firstValidReport) {
+          const lat = parseFloat(firstValidReport.location.latitude);
+          const lng = parseFloat(firstValidReport.location.longitude);
+          if (!isNaN(lat) && !isNaN(lng)) {
+            center = { lat, lng };
+          }
+        }
+      }
+
+      const map = new window.google.maps.Map(mapRef.current, {
+        zoom: 13,
+        center: center,
+        mapTypeId: window.google.maps.MapTypeId.ROADMAP,
+        mapTypeControl: true,
+        streetViewControl: true,
+        fullscreenControl: true,
+        styles: [
+          {
+            featureType: 'poi',
+            elementType: 'labels',
+            stylers: [{ visibility: 'off' }]
+          }
+        ]
+      });
+
+      mapInstanceRef.current = map;
+
+      // Prepare heatmap data with validation
+      const heatmapData = reports
+        .filter(report => {
+          return report.location && 
+                 typeof report.location.latitude === 'string' && 
+                 typeof report.location.longitude === 'string' &&
+                 report.location.latitude.trim() !== '' && 
+                 report.location.longitude.trim() !== '';
+        })
+        .map(report => {
+          try {
+            const lat = parseFloat(report.location.latitude);
+            const lng = parseFloat(report.location.longitude);
+            
+            // Validate coordinates
+            if (isNaN(lat) || isNaN(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+              console.warn('Invalid coordinates for report:', report._id, lat, lng);
+              return null;
+            }
+            
+            return {
+              location: new window.google.maps.LatLng(lat, lng),
+              weight: report.priority === 'High' ? 3 : report.priority === 'Medium' ? 2 : 1,
+            };
+          } catch (error) {
+            console.error('Error processing coordinates for report:', report._id, error);
+            return null;
+          }
+        })
+        .filter(item => item !== null); // Remove any null entries
+
+    if (heatmapData.length > 0) {
+      const heatmap = new window.google.maps.visualization.HeatmapLayer({
+        data: heatmapData,
+        map: map,
+      });
+
+      heatmapLayerRef.current = heatmap;
+    }
+
+    // Add user/worker location marker if available
+    if (workerLocation && (userRole === 'worker' || userRole === 'user')) {
+      if (workerMarkerRef.current) {
+        workerMarkerRef.current.setMap(null);
+      }
+
+      const workerMarker = new window.google.maps.Marker({
+        position: workerLocation,
+        map: map,
+        title: 'Your Current Location',
+        icon: {
+          path: window.google.maps.SymbolPath.CIRCLE,
+          scale: 12,
+          fillColor: '#3b82f6',
+          fillOpacity: 1,
+          strokeColor: '#ffffff',
+          strokeWeight: 4
+        },
+        animation: window.google.maps.Animation.DROP,
+        zIndex: 1000
+      });
+
+      const workerInfoWindow = new window.google.maps.InfoWindow({
+        content: `
+          <div style="padding: 0.5rem;">
+            <h4 style="margin: 0 0 0.25rem 0; font-size: 0.875rem; font-weight: bold; color: #3b82f6;">
+              📍 Your Current Location
+            </h4>
+            <p style="margin: 0; font-size: 0.75rem; color: #666;">
+              This is your current GPS position
+            </p>
+          </div>
+        `
+      });
+
+      workerMarker.addListener('click', () => {
+        workerInfoWindow.open(map, workerMarker);
+      });
+
+      workerMarkerRef.current = workerMarker;
+    }
+
+    // Add markers for grouped reports - Always show markers even if heatmap is disabled
+    Object.entries(groupedReports).forEach(([key, data]) => {
+        if (!data.location || !data.location.lat || !data.location.lng) return;
+        
+        const markerColor = getMarkerColor(data.reports[0]?.status || 'Reported');
+        
+        const marker = new window.google.maps.Marker({
+          position: {
+            lat: data.location.lat,
+            lng: data.location.lng,
+          },
+          map: map,
+          title: `${data.reports.length} reports at this location`,
+          label: {
+            text: data.reports.length.toString(),
+            color: 'white',
+            fontSize: '12px',
+            fontWeight: 'bold'
+          },
+          icon: {
+            path: 'M 0,0 C -2,-20 -10,-22 -10,-30 A 10,10 0 1,1 10,-30 C 10,-22 2,-20 0,0 z',
+            fillColor: '#' + markerColor,
+            fillOpacity: 1,
+            strokeColor: '#ffffff',
+            strokeWeight: 2,
+            scale: 1.2,
+            labelOrigin: new window.google.maps.Point(0, -30)
+          },
+        });
+
+        const infoWindow = new window.google.maps.InfoWindow({
+          content: `
+            <div style="padding: 0.5rem; max-width: 300px;">
+              <h4 style="margin: 0 0 0.5rem 0; font-size: 0.875rem; font-weight: bold;">
+                📍 ${data.location.address}
+              </h4>
+              <p style="margin: 0 0 0.5rem 0; font-size: 0.75rem; color: #666;">
+                ${data.reports.length} complaint${data.reports.length !== 1 ? 's' : ''} at this location
+              </p>
+              <div style="max-height: 200px; overflow-y: auto;">
+                ${data.reports.map((report, index) => `
+                  <div style="border-bottom: 1px solid #eee; padding: 0.25rem 0; cursor: pointer;" 
+                       onclick="window.reportClickHandler && window.reportClickHandler('${report._id}')">
+                    <div style="font-size: 0.75rem; font-weight: bold; color: #${getMarkerColor(report.status)};">
+                      #${report.ticketNumber || index + 1} - ${report.title}
+                    </div>
+                    <div style="font-size: 0.7rem; color: #666;">
+                      ${report.status} - ${report.priority || 'Medium'}
+                    </div>
+                    ${userRole === 'admin' || userRole === 'management' ? `
+                      <div style="font-size: 0.65rem; color: #888; margin-top: 2px;">
+                        Assigned: ${report.assignedWorkerId || 'Unassigned'}
+                      </div>
+                    ` : ''}
+                  </div>
+                `).join('')}
+              </div>
+            </div>
+          `
+        });
+
+        marker.addListener('click', () => {
+          infoWindow.open(map, marker);
+        });
+
+        markersRef.current.push(marker);
+      });
+
+      // Set up global click handler for report clicks
+      window.reportClickHandler = (reportId) => {
+        const report = reports.find(r => r._id === reportId);
+        if (report) {
+          setSelectedReport(report);
+          setShowReportModal(true);
+          if (onReportClick) {
+            onReportClick(report);
+          }
+        }
+      };
+
+    } catch (error) {
+      console.error('Error initializing map:', error);
+    }
+  };
+
+  const getMarkerColor = (status) => {
+    const colors = {
+      'Reported': '3b82f6',
+      'Assigned': 'f59e0b',
+      'In Progress': '6366f1',
+      'Completed': '10b981',
+      'Rejected': 'ef4444',
+      'pending': '3b82f6',
+      'in_progress': '6366f1',
+      'resolved': '10b981',
+      'rejected': 'ef4444'
+    };
+    return colors[status] || '6b7280';
+  };
+
+  // Set up global click handler for report titles
+  useEffect(() => {
+    window.reportClickHandler = (reportId) => {
+      const report = reports.find(r => r._id === reportId);
+      if (report) {
+        if (userRole === 'admin' || userRole === 'management') {
+          setSelectedReport(report);
+          setShowReportModal(true);
+        } else if (onReportClick) {
+          onReportClick(report);
+        }
+      }
+    };
+    
+    return () => {
+      window.reportClickHandler = null;
+    };
+  }, [reports, onReportClick, userRole]);
+
+  const closeReportModal = () => {
+    setShowReportModal(false);
+    setSelectedReport(null);
+  };
+
+  return (
+    <div style={{ padding: '1rem' }}>
+      
+      {!mapsLoaded ? (
+        <div style={{ 
+          width: '100%', 
+          height: '600px', 
+          borderRadius: '1rem', 
+          display: 'flex', 
+          alignItems: 'center', 
+          justifyContent: 'center',
+          background: 'rgba(255, 255, 255, 0.05)',
+          color: 'white',
+          border: '1px solid #4b5563'
+        }}>
+          <div style={{ textAlign: 'center' }}>
+            <p style={{ fontSize: '1.125rem', marginBottom: '0.5rem' }}>Loading Google Maps...</p>
+            <p style={{ fontSize: '0.875rem', color: '#9ca3af' }}>Please wait while the map loads</p>
+          </div>
+        </div>
+      ) : (
+        <>
+          <div ref={mapRef} style={{ 
+            width: '100%', 
+            height: '600px', 
+            borderRadius: '1rem', 
+            overflow: 'hidden', 
+            background: '#f3f4f6',
+            border: '1px solid #4b5563'
+          }} />
+          
+          <div style={{
+            marginTop: '1rem',
+            padding: '1rem',
+            background: 'rgba(0, 0, 0, 0.2)',
+            borderRadius: '0.5rem',
+            border: '1px solid #4b5563'
+          }}>
+            <h4 style={{ color: 'white', marginBottom: '0.5rem' }}>Legend</h4>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem', marginBottom: '1rem' }}>
+              {(userRole === 'worker' || userRole === 'user') && workerLocation && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <span style={{ 
+                    width: '20px', 
+                    height: '20px', 
+                    borderRadius: '50%', 
+                    backgroundColor: '#3b82f6',
+                    border: '3px solid white',
+                    position: 'relative'
+                  }}>
+                    <span style={{
+                      position: 'absolute',
+                      top: '50%',
+                      left: '50%',
+                      transform: 'translate(-50%, -50%)',
+                      width: '6px',
+                      height: '6px',
+                      borderRadius: '50%',
+                      backgroundColor: 'white'
+                    }}></span>
+                  </span>
+                  <span style={{ color: 'white', fontSize: '0.875rem', fontWeight: 'bold' }}>📍 Your Location</span>
+                </div>
+              )}
+              {userRole === 'user' && userId && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <span style={{ fontSize: '1.5rem' }}>📍</span>
+                  <span style={{ color: '#10b981', fontSize: '0.875rem', fontWeight: 'bold' }}>Your Reports (Green)</span>
+                </div>
+              )}
+              {userRole === 'worker' && assignedReportIds.length > 0 && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <span style={{ fontSize: '1.5rem', color: '#ef4444' }}>📍</span>
+                  <span style={{ color: '#ef4444', fontSize: '0.875rem', fontWeight: 'bold' }}>Assigned Tasks (Red)</span>
+                </div>
+              )}
+              
+              {/* Management and Admin Legend */}
+              {(userRole === 'management' || userRole === 'admin') && (
+                <>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <span style={{ fontSize: '1.5rem', color: '#ef4444' }}>📍</span>
+                    <span style={{ color: '#ef4444', fontSize: '0.875rem', fontWeight: 'bold' }}>Not Assigned (Red)</span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <span style={{ fontSize: '1.5rem', color: '#f59e0b' }}>📍</span>
+                    <span style={{ color: '#f59e0b', fontSize: '0.875rem', fontWeight: 'bold' }}>Assigned (Yellow)</span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <span style={{ fontSize: '1.5rem', color: '#10b981' }}>📍</span>
+                    <span style={{ color: '#10b981', fontSize: '0.875rem', fontWeight: 'bold' }}>Completed (Green)</span>
+                  </div>
+                </>
+              )}
+              
+              {/* Regular User/Worker Status Legend - Only show if not user with own reports or worker with assigned */}
+              {userRole !== 'management' && userRole !== 'admin' && 
+               !(userRole === 'user' && userId) && 
+               !(userRole === 'worker' && assignedReportIds.length > 0) && (
+                <>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <span style={{ 
+                      width: '16px', 
+                      height: '16px', 
+                      borderRadius: '50%', 
+                      backgroundColor: '#3b82f6' 
+                    }}></span>
+                    <span style={{ color: 'white', fontSize: '0.875rem' }}>Reported</span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <span style={{ 
+                      width: '16px', 
+                      height: '16px', 
+                      borderRadius: '50%', 
+                      backgroundColor: '#f59e0b' 
+                    }}></span>
+                    <span style={{ color: 'white', fontSize: '0.875rem' }}>Assigned</span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <span style={{ 
+                      width: '16px', 
+                      height: '16px', 
+                      borderRadius: '50%', 
+                      backgroundColor: '#6366f1' 
+                    }}></span>
+                    <span style={{ color: 'white', fontSize: '0.875rem' }}>In Progress</span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <span style={{ 
+                      width: '16px', 
+                      height: '16px', 
+                      borderRadius: '50%', 
+                      backgroundColor: '#10b981' 
+                    }}></span>
+                    <span style={{ color: 'white', fontSize: '0.875rem' }}>Completed</span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <span style={{ 
+                      width: '16px', 
+                      height: '16px', 
+                      borderRadius: '50%', 
+                      backgroundColor: '#ef4444' 
+                    }}></span>
+                    <span style={{ color: 'white', fontSize: '0.875rem' }}>Rejected</span>
+                  </div>
+                </>
+              )}
+            </div>
+            <p style={{ fontSize: '0.75rem', color: '#9ca3af', margin: 0 }}>
+              {Object.keys(groupedReports).length > 0 ? (
+                <>Total Reports on Map: {Object.values(groupedReports).reduce((sum, group) => sum + group.reports.length, 0)} (within last 24h for completed)</>
+              ) : (
+                <>No reports to display</>
+              )}
+              {Object.keys(groupedReports).length > 0 && (
+                <>
+                  {' | Click on 📍 markers to see grouped reports at each location'}
+                  {(userRole === 'admin' || userRole === 'management') && ' | Click ticket numbers to view details'}
+                </>
+              )}
+            </p>
+          </div>
+        </>
+      )}
+
+      {/* Report Details Modal - Only for Admin and Management */}
+      {showReportModal && selectedReport && (userRole === 'admin' || userRole === 'management') && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.8)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000,
+          padding: '1rem'
+        }}>
+          <div style={{
+            backgroundColor: '#1f2937',
+            borderRadius: '0.75rem',
+            padding: '1.5rem',
+            maxWidth: '600px',
+            width: '100%',
+            maxHeight: '80vh',
+            overflowY: 'auto',
+            border: '1px solid #4b5563'
+          }}>
+            <div style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              marginBottom: '1rem'
+            }}>
+              <h3 style={{ color: 'white', margin: 0 }}>Report Details</h3>
+              <button
+                onClick={closeReportModal}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: '#9ca3af',
+                  fontSize: '1.5rem',
+                  cursor: 'pointer',
+                  padding: '0.25rem'
+                }}
+              >
+                ×
+              </button>
+            </div>
+
+            <div style={{ color: 'white' }}>
+              <div style={{ marginBottom: '1rem' }}>
+                <h4 style={{ color: '#3b82f6', marginBottom: '0.5rem' }}>Basic Information</h4>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.5rem' }}>
+                  <div><strong>Ticket #:</strong> {selectedReport.ticketNumber || 'N/A'}</div>
+                  <div><strong>Status:</strong> <span style={{ color: `#${getMarkerColor(selectedReport.status)}` }}>{selectedReport.status}</span></div>
+                  <div><strong>Priority:</strong> {selectedReport.priority || 'Medium'}</div>
+                  <div><strong>Category:</strong> {selectedReport.category || 'N/A'}</div>
+                </div>
+              </div>
+
+              <div style={{ marginBottom: '1rem' }}>
+                <h4 style={{ color: '#3b82f6', marginBottom: '0.5rem' }}>Report Details</h4>
+                <div style={{ marginBottom: '0.5rem' }}>
+                  <strong>Title:</strong> {selectedReport.title}
+                </div>
+                <div style={{ marginBottom: '0.5rem' }}>
+                  <strong>Description:</strong> {selectedReport.description || 'No description provided'}
+                </div>
+                {selectedReport.imageUrl && (
+                  <div style={{ marginBottom: '0.5rem' }}>
+                    <strong>Image:</strong>
+                    <img 
+                      src={`${process.env.REACT_APP_API_BASE_URL}${selectedReport.imageUrl}`} 
+                      alt="Report" 
+                      style={{ 
+                        maxWidth: '100%', 
+                        maxHeight: '200px', 
+                        borderRadius: '0.5rem',
+                        marginTop: '0.5rem',
+                        border: '1px solid #4b5563'
+                      }} 
+                    />
+                  </div>
+                )}
+              </div>
+
+              <div style={{ marginBottom: '1rem' }}>
+                <h4 style={{ color: '#3b82f6', marginBottom: '0.5rem' }}>Location Information</h4>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.5rem' }}>
+                  <div><strong>Address:</strong> {selectedReport.location?.address || 'N/A'}</div>
+                  <div><strong>Latitude:</strong> {selectedReport.location?.latitude || 'N/A'}</div>
+                  <div><strong>Longitude:</strong> {selectedReport.location?.longitude || 'N/A'}</div>
+                </div>
+              </div>
+
+              <div style={{ marginBottom: '1rem' }}>
+                <h4 style={{ color: '#3b82f6', marginBottom: '0.5rem' }}>User Information</h4>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.5rem' }}>
+                  <div><strong>Username:</strong> {selectedReport.username || 'N/A'}</div>
+                  <div><strong>User ID:</strong> {selectedReport.userId || 'N/A'}</div>
+                </div>
+              </div>
+
+              <div style={{ marginBottom: '1rem' }}>
+                <h4 style={{ color: '#3b82f6', marginBottom: '0.5rem' }}>Timestamps</h4>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.5rem' }}>
+                  <div><strong>Created:</strong> {selectedReport.createdAt ? new Date(selectedReport.createdAt).toLocaleString() : 'N/A'}</div>
+                  <div><strong>Updated:</strong> {selectedReport.updatedAt ? new Date(selectedReport.updatedAt).toLocaleString() : 'N/A'}</div>
+                </div>
+              </div>
+
+              {selectedReport.assignedWorker && (
+                <div style={{ marginBottom: '1rem' }}>
+                  <h4 style={{ color: '#3b82f6', marginBottom: '0.5rem' }}>Assignment</h4>
+                  <div><strong>Assigned Worker:</strong> {selectedReport.assignedWorker}</div>
+                </div>
+              )}
+
+              {selectedReport.notes && (
+                <div style={{ marginBottom: '1rem' }}>
+                  <h4 style={{ color: '#3b82f6', marginBottom: '0.5rem' }}>Notes</h4>
+                  <div style={{ 
+                    background: 'rgba(0, 0, 0, 0.3)', 
+                    padding: '0.75rem', 
+                    borderRadius: '0.5rem',
+                    border: '1px solid #4b5563'
+                  }}>
+                    {selectedReport.notes}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div style={{
+              display: 'flex',
+              justifyContent: 'flex-end',
+              gap: '0.5rem',
+              marginTop: '1.5rem',
+              paddingTop: '1rem',
+              borderTop: '1px solid #4b5563'
+            }}>
+              <button
+                onClick={closeReportModal}
+                style={{
+                  padding: '0.5rem 1rem',
+                  backgroundColor: '#6b7280',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '0.375rem',
+                  cursor: 'pointer',
+                  fontSize: '0.875rem'
+                }}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default HeatMap;
